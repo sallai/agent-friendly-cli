@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent-Friendly CLI"
+  short_description: "Build CLIs that are reliable for AI agents"
+  default_prompt: "Use $agent-friendly-cli to design, review, or refactor a CLI for AI-agent-friendly behavior."
