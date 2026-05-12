@@ -17,6 +17,7 @@ Keep streams strictly separated:
 
 - `stdout` is for the requested payload only.
 - `stderr` is for logs, progress, warnings, debug traces, setup guidance, and human status text.
+- Progress and long-running status prints must flush immediately, for example `print(message, file=sys.stderr, flush=True)`.
 - In JSON mode, stdout must contain exactly one valid JSON object and no leading, trailing, or interleaved text.
 - Do not print `Loading...`, `Wrote ...`, progress bars, or setup walkthroughs to stdout unless that text is the explicit payload of a command like `setup`.
 
@@ -90,6 +91,52 @@ The schema output should be JSON and include:
 
 Human `--help` should mention `--output json`, schema discovery, non-interactive flags, and exit codes.
 
+## Common CLI Shape
+
+Mirror the conventions used by the Notion, Slack, and Google Workspace CLIs when creating a new service CLI:
+
+```sh
+uv run scripts/<service>-cli --help
+uv run scripts/<service>-cli setup
+uv run scripts/<service>-cli me
+uv run scripts/<service>-cli config
+uv run scripts/<service>-cli schema
+uv run scripts/<service>-cli api GET "/resource" --query limit=10
+```
+
+Use these global flags when applicable:
+
+- `--env-file PATH`: load local credentials from an env file before process environment fallbacks.
+- `--output {json,human}`: select machine or human output; JSON mode must use the stable envelope.
+- provider version flags such as `--notion-version` only when the upstream API requires them.
+
+Use these common command names and parameter patterns:
+
+- `setup`: print auth/setup walkthroughs; support focused flags such as `--env-only`, `--scopes-only`, `--capabilities-only`, `--manifest-only`, or `--oauth-note`.
+- `me`: validate the active credentials and return the current user, token identity, or auth-test response.
+- `config`: show resolved config paths and whether files exist; never print token values or client secrets.
+- `schema` or `--schema`: print commands, arguments, output envelopes, auth requirements, and exit codes as JSON.
+- `api METHOD TARGET`: raw provider escape hatch with `--data JSON|@file|-`, `--query key=value`, optional `--paginate`, `--limit N`, and provider-specific options such as `--base`.
+- `search QUERY --limit N`: use for provider-wide search when the service supports it.
+- resource groups should use predictable verbs: `list`, `get`, `create`, `update`, `delete`, `restore`, `export`, `download`, `upload`.
+
+For file-output commands, prefer:
+
+- `--output-file PATH` for a single output file.
+- `--output-dir PATH` for exports that produce multiple files or downloads.
+- In JSON mode, stdout returns a manifest containing written paths and counts.
+- Human `Wrote ...` lines go to stderr, never stdout.
+
+For token storage, use the service-specific directory pattern:
+
+```sh
+~/.<service>/env
+~/.<service>/<service>.env
+~/.<service>/.env
+```
+
+Read these env files first, then fall back to process environment variables. Support a primary token name like `<SERVICE>_TOKEN`, plus compatibility aliases only when they are useful.
+
 ## Non-Interactive Behavior
 
 Agents must never hang on prompts:
@@ -127,11 +174,22 @@ printf 'exit=%s stderr_bytes=%s\n' "$code" "$(wc -c <stderr.log)"
 
 ## Implementation Notes
 
+Prefer starting from the bundled template when creating a new Python CLI:
+
+```sh
+cp <skill-dir>/scripts/agent_cli_template.py scripts/<service>-cli
+chmod +x scripts/<service>-cli
+uv run scripts/<service>-cli --help
+uv run scripts/<service>-cli --output json schema
+```
+
+Then replace the provider constants at the top of the template and add service-specific resource groups.
+
 Prefer small shared helpers inside the CLI:
 
 - `emit_json(data, metadata=None, status="success")`
 - `emit_error(code, message, exit_code, metadata=None)`
-- `log(message)` that always writes to stderr.
+- `log(message)` that always writes to stderr with `flush=True`.
 - one central exception-to-exit-code mapper.
 - one central schema object used by both `schema` and documentation tests.
 
